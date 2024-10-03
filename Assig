@@ -1,0 +1,159 @@
+//Problem 1//
+#Use an official Python runtime as the base image
+FROM python:3.9-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the application code into the container
+COPY . /app
+
+# Install any Python dependencies
+RUN pip install -r requirements.txt
+
+# Expose the port the app runs on
+EXPOSE 5000
+
+# Command to run the application
+CMD ["python", "app.py"]
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wisecow-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: wisecow
+  template:
+    metadata:
+      labels:
+        app: wisecow
+    spec:
+      containers:
+      - name: wisecow-container
+        image: your-docker-registry/wisecow:latest
+        ports:
+        - containerPort: 5000
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: wisecow-service
+spec:
+  selector:
+    app: wisecow
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
+  type: LoadBalancer
+
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+    - name: Login to DockerHub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+    - name: Build and Push Docker image
+      run: |
+        docker build -t your-docker-registry/wisecow:latest .
+        docker push your-docker-registry/wisecow:latest
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f deployment.yaml
+        kubectl apply -f service.yaml
+
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wisecow-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - your-domain.com
+    secretName: wisecow-tls
+  rules:
+  - host: your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: wisecow-service
+            port:
+              number: 80
+
+
+
+//Problem2//
+
+import psutil
+import logging
+
+# Set logging configuration
+logging.basicConfig(filename="system_health.log", level=logging.INFO)
+
+# Define thresholds
+CPU_THRESHOLD = 80.0
+MEMORY_THRESHOLD = 80.0
+DISK_THRESHOLD = 90.0
+
+def monitor_system():
+    cpu_usage = psutil.cpu_percent(interval=1)
+    memory_info = psutil.virtual_memory()
+    disk_info = psutil.disk_usage('/')
+
+    # Check CPU usage
+    if cpu_usage > CPU_THRESHOLD:
+        logging.warning(f"High CPU usage detected: {cpu_usage}%")
+    # Check memory usage
+    if memory_info.percent > MEMORY_THRESHOLD:
+        logging.warning(f"High Memory usage detected: {memory_info.percent}%")
+    # Check disk usage
+    if disk_info.percent > DISK_THRESHOLD:
+        logging.warning(f"Low Disk Space: {disk_info.percent}% used")
+
+if __name__ == "__main__":
+    monitor_system()
+
+
+#!/bin/bash
+
+# Set variables
+SOURCE_DIR="/path/to/source"
+DESTINATION_DIR="/remote/server/path"
+LOGFILE="/var/log/backup.log"
+
+# Perform backup using rsync
+rsync -avz --delete $SOURCE_DIR $DESTINATION_DIR
+
+# Check for success or failure
+if [ $? -eq 0 ]; then
+    echo "$(date) - Backup successful" >> $LOGFILE
+else
+    echo "$(date) - Backup failed" >> $LOGFILE
+fi
+
